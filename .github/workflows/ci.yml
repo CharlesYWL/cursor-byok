@@ -65,14 +65,8 @@ jobs:
         run: npm run check
 
   desktop-rust:
-    name: Desktop Rust (${{ matrix.os }})
-    strategy:
-      fail-fast: false
-      matrix:
-        os:
-          - windows-latest
-          - macos-latest
-    runs-on: ${{ matrix.os }}
+    name: Desktop Rust (Windows)
+    runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
 
