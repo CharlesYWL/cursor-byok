@@ -52,6 +52,12 @@ You can connect OpenAI- and Anthropic-compatible services, customize endpoints, 
 
 For complete installation steps, system configuration, and Frequently Asked Questions, see the [User Guide](https://docs.leokun.cn).
 
+### Automatic Windows builds
+
+Every push to `main` builds a Windows x86_64 NSIS installer (`.exe`) and portable ZIP, then publishes them to [this fork's Releases](https://github.com/CharlesYWL/cursor-byok/releases) under a unique `main-<commit SHA>` tag.
+
+These packages are unsigned, require manual installation, and need no signing secrets. They are not marked Latest and do not publish updater manifests; the existing signed, version-tagged release workflow is unchanged.
+
 ## Model Management
 
 Model configurations support both OpenAI and Anthropic API protocols. Each model channel can independently define its context window, maximum output tokens, reasoning effort, custom headers, and additional request parameters.
@@ -109,5 +115,4 @@ Issues and pull requests are welcome. See the [Contributing Guide](./CONTRIBUTIN
 ## License
 
 This project is open source under the [MIT License](./LICENSE).
-
 
