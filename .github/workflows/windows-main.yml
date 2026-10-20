@@ -1,0 +1,98 @@
+name: Windows main release
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-main-${{ github.sha }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build Windows x86_64 packages
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ". -> target"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/desktop/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: apps/desktop
+        run: npm ci
+
+      - name: Build Windows installer without updater signing
+        working-directory: apps/desktop
+        shell: pwsh
+        run: |
+          $config = Join-Path $env:RUNNER_TEMP 'tauri-windows-main.json'
+          '{"bundle":{"createUpdaterArtifacts":false}}' | Set-Content -LiteralPath $config -Encoding utf8
+          npm run tauri:build -- --bundles nsis --config $config
+
+      - name: Collect installer and portable ZIP
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force windows-packages | Out-Null
+          Copy-Item -Path target/release/bundle/nsis/*-setup.exe -Destination windows-packages
+          Compress-Archive -LiteralPath target/release/cursor-byok-desktop.exe `
+            -DestinationPath windows-packages/cursor-byok-windows-x86_64.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-main-${{ github.sha }}
+          path: windows-packages/*
+          if-no-files-found: error
+
+  publish:
+    name: Publish Windows main release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows-main-${{ github.sha }}
+          path: windows-packages
+
+      - name: Publish commit-specific packages
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          TAG: main-${{ github.sha }}
+        shell: bash
+        run: |
+          state=$(gh release view "${TAG}" --json isDraft --jq 'if .isDraft then "draft" else "published" end' 2>/dev/null || true)
+          if [[ "${state}" = "published" ]]; then
+            echo "Packages for ${GITHUB_SHA} are already published; nothing to do."
+            exit 0
+          fi
+
+          if [[ "${state}" != "draft" ]]; then
+            gh release create "${TAG}" \
+              --target "${GITHUB_SHA}" \
+              --title "Windows main build ${GITHUB_SHA:0:7}" \
+              --notes "Automated Windows x86_64 build from main commit ${GITHUB_SHA}. Includes an unsigned NSIS installer and a portable ZIP. Install manually; updater signatures and manifests are not included." \
+              --draft \
+              --prerelease=false \
+              --latest=false
+          fi
+
+          gh release upload "${TAG}" windows-packages/* --clobber
+          gh release edit "${TAG}" --draft=false --latest=false
