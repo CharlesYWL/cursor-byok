@@ -241,13 +241,16 @@ export async function streamOpenAiChat(
     const choice = Array.isArray(value.choices) ? record(value.choices[0]) : null;
     if (!choice) continue;
     const delta = record(choice.delta) ?? {};
-    const reasoningDelta = text(delta.reasoning_content) ?? text(delta.reasoning);
+    const replayableDelta = text(delta.reasoning_content) ?? text(delta.reasoning);
+    // GitHub Copilot streams Claude thinking as reasoning_text; it is shown but not replayed,
+    // because Copilot cannot accept it back without the matching reasoning_opaque signature.
+    const reasoningDelta = replayableDelta ?? text(delta.reasoning_text);
     if (reasoningDelta) {
       if (!thinkingOpen) {
         thinkingOpen = true;
         output.emit({ type: "thinking-start" });
       }
-      reasoning += reasoningDelta;
+      if (replayableDelta) reasoning += replayableDelta;
       output.emit({ type: "thinking-delta", text: reasoningDelta });
     }
     const content = text(delta.content);
