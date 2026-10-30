@@ -471,6 +471,36 @@ Deno.test("chat route sends max_tokens, supported effort only and no service tie
   assertEquals(events.at(-1), { type: "done", reason: "stop" });
 });
 
+Deno.test("chat route streams Claude reasoning_text as thinking without replaying it", async () => {
+  const events: ModelEvent[] = [];
+  const result = await copilotProvider.invoke(
+    { model: chatModel, resource: snapshot(account()), request: request() },
+    output(events),
+    context({
+      stream: () =>
+        streamOf(200, [
+          'data: {"choices":[{"delta":{"role":"assistant","reasoning_text":"Check "}}]}',
+          'data: {"choices":[{"delta":{"reasoning_text":"the logs."}}]}',
+          'data: {"choices":[{"delta":{"reasoning_opaque":"signature"}}]}',
+          'data: {"choices":[{"delta":{"content":"Done."}}]}',
+          'data: {"choices":[{"delta":{},"finish_reason":"stop"}]}',
+          "data: [DONE]",
+        ]),
+    }),
+  );
+  assertEquals(result, { status: "completed" });
+  assertEquals(events, [
+    { type: "thinking-start" },
+    { type: "thinking-delta", text: "Check " },
+    { type: "thinking-delta", text: "the logs." },
+    { type: "thinking-end" },
+    { type: "text-start" },
+    { type: "text-delta", text: "Done." },
+    { type: "text-end" },
+    { type: "done", reason: "stop" },
+  ]);
+});
+
 Deno.test("responses route keeps max_output_tokens and cache key and disables storage", async () => {
   let body: Record<string, unknown> = {};
   const result = await copilotProvider.invoke(
